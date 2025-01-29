@@ -233,6 +233,20 @@ def check_http_authentication(handler: http.server.BaseHTTPRequestHandler
     
     return valid
 
+def check_http_get(handler: http.server.BaseHTTPRequestHandler) -> bool:
+    if not args.upload_only:
+        return True
+
+    handler.send_error(http.HTTPStatus.NOT_FOUND, "File not found")
+    return False
+
+def check_directory_index(handler: http.server.BaseHTTPRequestHandler) -> bool:
+    if not args.no_directory_index:
+        return True
+
+    handler.send_error(http.HTTPStatus.NOT_FOUND, "File not found")
+    return False
+
 # Let's not inherit http.server.SimpleHTTPRequestHandler - that would cause
 # diamond-pattern inheritance
 class ListDirectoryInterception:
@@ -260,6 +274,8 @@ class ListDirectoryInterception:
     
     # True argument type is str | pathlib.Path, but Python 3.9 doesn't support |
     def list_directory(self, path: pathlib.Path) -> object:
+        if not check_directory_index(self): return
+
         setattr(self, 'flush_headers', self.flush_headers_interceptor)
         setattr(self, 'copyfile', self.copyfile_interceptor)
         
@@ -269,6 +285,7 @@ class ListDirectoryInterception:
 class SimpleHTTPRequestHandler(ListDirectoryInterception,
     http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
+        if not check_http_get(self): return
         if not check_http_authentication(self): return
         
         if self.path == '/upload':
@@ -296,7 +313,14 @@ class SimpleHTTPRequestHandler(ListDirectoryInterception,
 
 class CGIHTTPRequestHandler(ListDirectoryInterception,
     http.server.CGIHTTPRequestHandler):
+    def do_HEAD(self):
+        if not check_http_get(self): return
+        if not check_http_authentication(self): return
+
+        super().do_HEAD()
+
     def do_GET(self):
+        if not check_http_get(self): return
         if not check_http_authentication(self): return
         
         if self.path == '/upload':
@@ -391,6 +415,8 @@ def serve_forever():
     assert hasattr(args, 'basic_auth')
     assert hasattr(args, 'basic_auth_upload')
     assert hasattr(args, 'directory') and type(args.directory) is str
+    assert hasattr(args, 'no_directory_index') and type(args.no_directory_index) is bool
+    assert hasattr(args, 'upload_only') and type(args.upload_only) is bool
     
     if args.cgi:
         handler_class = CGIHTTPRequestHandler
@@ -399,6 +425,12 @@ def serve_forever():
             directory=args.directory)
     
     print('File upload available at /upload')
+
+    if args.no_directory_index:
+        print('Directory index disabled')
+
+    if args.upload_only:
+        print('Server in upload only mode')
     
     class DualStackServer(http.server.ThreadingHTTPServer):
         def server_bind(self):
@@ -449,6 +481,10 @@ def main():
         'uploads)')
     parser.add_argument('--basic-auth-upload',
         help='Specify user:pass for basic authentication (uploads only)')
+    parser.add_argument('--no-directory-index', action='store_true', default=False,
+        help='Disable directory index [default: false]')
+    parser.add_argument('--upload-only', action='store_true', default=False,
+        help='Disable all get requests (server is "hidden" and only accepting post requests) [default: false]')
     
     args = parser.parse_args()
     if not hasattr(args, 'directory'): args.directory = os.getcwd()
