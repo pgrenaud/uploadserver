@@ -490,3 +490,8 @@ def main():
     if not hasattr(args, 'directory'): args.directory = os.getcwd()
     
     serve_forever()
+
+def main_upload_only():
+    import sys as _sys
+    _sys.argv.append('--upload-only')
+    main()

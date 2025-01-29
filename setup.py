@@ -20,6 +20,9 @@ setuptools.setup(
     ],
     python_requires='>=3.9',
     entry_points = {
-        'console_scripts': ['uploadserver=uploadserver:main'],
+        'console_scripts': [
+            'uploadserver=uploadserver:main',
+            'uploadonlyserver=uploadserver:main_upload_only',
+        ],
     }
 )
